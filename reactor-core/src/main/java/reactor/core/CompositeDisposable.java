@@ -24,43 +24,53 @@ import javax.annotation.Nullable;
 import reactor.util.concurrent.OpenHashSet;
 
 /**
+ * A container of {@link Disposable} that is itself {@link Disposable}. Atomically
+ * add and remove disposable, and dispose them all in one go by either using {@link #clear()}
+ * (allowing further reuse of the container) or {@link #dispose()} (disallowing further
+ * reuse of the container).
+ * <p>
+ * Two removal operations are offered: {@link #delete(Disposable)} will NOT call
+ * {@link Disposable#dispose()} on the element removed from the container, while
+ * {@link #remove(Disposable)} will.
+ *
  * @author Simon Baslé
+ * @author David Karnok
  */
 public class CompositeDisposable implements Disposable {
 
-	OpenHashSet<Disposable> resources;
-
+	OpenHashSet<Disposable> disposables;
 	volatile boolean disposed;
 
 	/**
-	 * Creates an empty CompositeDisposable.
+	 * Creates an empty {@link CompositeDisposable}.
 	 */
 	public CompositeDisposable() {
 	}
 
 	/**
-	 * Creates a CompositeDisposables with the given array of initial elements.
-	 * @param resources the array of Disposables to start with
+	 * Creates a {@link CompositeDisposable} with the given array of initial elements.
+	 * @param disposables the array of {@link Disposable} to start with
 	 */
-	public CompositeDisposable(Disposable... resources) {
-		Objects.requireNonNull(resources, "resources is null");
-		this.resources = new OpenHashSet<>(resources.length + 1, 0.75f);
-		for (Disposable d : resources) {
+	public CompositeDisposable(Disposable... disposables) {
+		Objects.requireNonNull(disposables, "disposables is null");
+		this.disposables = new OpenHashSet<>(disposables.length + 1, 0.75f);
+		for (Disposable d : disposables) {
 			Objects.requireNonNull(d, "Disposable item is null");
-			this.resources.add(d);
+			this.disposables.add(d);
 		}
 	}
 
 	/**
-	 * Creates a CompositeDisposables with the given Iterable sequence of initial elements.
-	 * @param resources the Iterable sequence of Disposables to start with
+	 * Creates a {@link CompositeDisposable} with the given {@link Iterable} sequence of
+	 * initial elements.
+	 * @param disposables the Iterable sequence of {@link Disposable} to start with
 	 */
-	public CompositeDisposable(Iterable<? extends Disposable> resources) {
-		Objects.requireNonNull(resources, "resources is null");
-		this.resources = new OpenHashSet<>();
-		for (Disposable d : resources) {
+	public CompositeDisposable(Iterable<? extends Disposable> disposables) {
+		Objects.requireNonNull(disposables, "disposables is null");
+		this.disposables = new OpenHashSet<>();
+		for (Disposable d : disposables) {
 			Objects.requireNonNull(d, "Disposable item is null");
-			this.resources.add(d);
+			this.disposables.add(d);
 		}
 	}
 
@@ -70,6 +80,8 @@ public class CompositeDisposable implements Disposable {
 	 * be reused, as {@link #add(Disposable)} and {@link #addAll(Disposable...)} methods
 	 * will immediately return {@literal false}. Use {@link #clear()} instead if you want
 	 * to reuse the container.
+	 *
+	 * @see #clear()
 	 */
 	@Override
 	public void dispose() {
@@ -82,8 +94,8 @@ public class CompositeDisposable implements Disposable {
 				return;
 			}
 			disposed = true;
-			set = resources;
-			resources = null;
+			set = disposables;
+			disposables = null;
 		}
 
 		dispose(set);
@@ -113,10 +125,10 @@ public class CompositeDisposable implements Disposable {
 		if (!disposed) {
 			synchronized (this) {
 				if (!disposed) {
-					OpenHashSet<Disposable> set = resources;
+					OpenHashSet<Disposable> set = disposables;
 					if (set == null) {
 						set = new OpenHashSet<>();
-						resources = set;
+						disposables = set;
 					}
 					set.add(d);
 					return true;
@@ -128,8 +140,8 @@ public class CompositeDisposable implements Disposable {
 	}
 
 	/**
-	 * Atomically adds the given array of Disposables to the container or
-	 * disposes them all if the container has been disposed.
+	 * Atomically adds the given array of Disposables to the container or disposes them
+	 * all if the container has been disposed.
 	 * @param ds the array of Disposables
 	 * @return true if the operation was successful, false if the container has been disposed
 	 */
@@ -138,10 +150,10 @@ public class CompositeDisposable implements Disposable {
 		if (!disposed) {
 			synchronized (this) {
 				if (!disposed) {
-					OpenHashSet<Disposable> set = resources;
+					OpenHashSet<Disposable> set = disposables;
 					if (set == null) {
 						set = new OpenHashSet<>(ds.length + 1, 0.75f);
-						resources = set;
+						disposables = set;
 					}
 					for (Disposable d : ds) {
 						Objects.requireNonNull(d, "d is null");
@@ -174,7 +186,7 @@ public class CompositeDisposable implements Disposable {
 				return false;
 			}
 
-			OpenHashSet<Disposable> set = resources;
+			OpenHashSet<Disposable> set = disposables;
 			if (set == null || !set.remove(d)) {
 				return false;
 			}
@@ -212,8 +224,8 @@ public class CompositeDisposable implements Disposable {
 				return;
 			}
 
-			set = resources;
-			resources = null;
+			set = disposables;
+			disposables = null;
 		}
 
 		dispose(set);
@@ -231,7 +243,7 @@ public class CompositeDisposable implements Disposable {
 			if (disposed) {
 				return 0;
 			}
-			OpenHashSet<Disposable> set = resources;
+			OpenHashSet<Disposable> set = disposables;
 			return set != null ? set.size() : 0;
 		}
 	}
