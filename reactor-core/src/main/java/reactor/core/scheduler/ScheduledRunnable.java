@@ -66,7 +66,7 @@ final class ScheduledRunnable implements Runnable, Disposable {
 		finally {
 			DisposableContainer<ScheduledRunnable> o = parent;
 			if (o != DISPOSED_PARENT && o != null && PARENT.compareAndSet(this, o, DONE_PARENT)) {
-				o.remove(this);
+				o.delete(this);
 			}
 
 			Future f;
@@ -122,7 +122,7 @@ final class ScheduledRunnable implements Runnable, Disposable {
 				return;
 			}
 			if (PARENT.compareAndSet(this, o, DISPOSED_PARENT)) {
-				o.remove(this);
+				o.delete(this);
 				return;
 			}
 		}

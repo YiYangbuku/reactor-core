@@ -275,7 +275,7 @@ final class SingleScheduler implements Scheduler, Supplier<ScheduledExecutorServ
 		}
 
 		@Override
-		public boolean remove(ScheduledRunnable task) {
+		public boolean delete(ScheduledRunnable task) {
 			if (shutdown) {
 				return false;
 			}

@@ -36,22 +36,24 @@ interface DisposableContainer<T extends Disposable> {
 	boolean add(T disposable);
 
 	/**
-	 * Remove the {@link Disposable} from this container, without disposing it.
+	 * Delete the {@link Disposable} from this container, without disposing it.
 	 *
-	 * @param disposable the {@link Disposable} to remove.
-	 * @return true if the disposable was successfully removed, false otherwise.
+	 * @param disposable the {@link Disposable} to delete.
+	 * @return true if the disposable was successfully deleted, false otherwise.
+	 * @see #remove(Disposable)
 	 */
-	boolean remove(T disposable);
+	boolean delete(T disposable);
 
 	/**
-	 * Remove the {@link Disposable} from this container, and additionally call
-	 * {@link Disposable#dispose() dispose()} on it (provided the removal did succeed).
+	 * Remove the {@link Disposable} from this container, that is delete it from the
+	 * container and dispose it via {@link Disposable#dispose() dispose()} once deleted.
 	 *
 	 * @param disposable the {@link Disposable} to remove and dispose.
 	 * @return true if the disposable was successfully removed and disposed, false otherwise.
+	 * @see #delete(Disposable)
 	 */
-	default boolean removeAndDispose(T disposable) {
-		if (remove(disposable)) {
+	default boolean remove(T disposable) {
+		if (delete(disposable)) {
 			disposable.dispose();
 			return true;
 		}

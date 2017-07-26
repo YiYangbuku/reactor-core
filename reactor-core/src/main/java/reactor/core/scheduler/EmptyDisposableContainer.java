@@ -31,7 +31,7 @@ final class EmptyDisposableContainer<T extends Disposable> implements Disposable
 	}
 
 	@Override
-	public boolean remove(T disposable) {
+	public boolean delete(T disposable) {
 		return false;
 	}
 }

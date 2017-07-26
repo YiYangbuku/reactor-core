@@ -16,9 +16,7 @@
 
 package reactor.core.scheduler;
 
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
@@ -171,7 +169,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 				}
 			}
 			catch (RejectedExecutionException ree) {
-				removeAndDispose(sr);
+				remove(sr);
 			}
 			return REJECTED;
 		}
@@ -193,7 +191,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 				}
 			}
 			catch (RejectedExecutionException ree) {
-				removeAndDispose(sr);
+				remove(sr);
 			}
 			return REJECTED;
 		}
@@ -215,7 +213,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 				}
 			}
 			catch (RejectedExecutionException ree) {
-				removeAndDispose(sr);
+				remove(sr);
 			}
 			return REJECTED;
 		}
@@ -236,7 +234,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 		}
 
 		@Override
-		public boolean remove(ExecutorServiceSchedulerRunnable sr) {
+		public boolean delete(ExecutorServiceSchedulerRunnable sr) {
 			if (!terminated) {
 				synchronized (this) {
 					if (!terminated) {
@@ -325,7 +323,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 			finally {
 				ExecutorServiceWorker o = parent;
 				if (o != DISPOSED_PARENT && o != null && PARENT.compareAndSet(this, o, DONE_PARENT)) {
-					o.remove(this);
+					o.delete(this);
 				}
 
 				Future f;
@@ -381,7 +379,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 					return;
 				}
 				if (PARENT.compareAndSet(this, o, DISPOSED_PARENT)) {
-					o.remove(this);
+					o.delete(this);
 					return;
 				}
 			}
