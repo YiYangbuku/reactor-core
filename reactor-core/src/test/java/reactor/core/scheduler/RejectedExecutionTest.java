@@ -22,20 +22,20 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.reactivestreams.Publisher;
-
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Hooks;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.ParallelFlux;
 import reactor.test.StepVerifier;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.junit.Assert.assertTrue;
 
 public class RejectedExecutionTest {
 
@@ -49,11 +49,13 @@ public class RejectedExecutionTest {
 
 	@Before
 	public void setUp() {
-		scheduler = new BoundedScheduler(3, Schedulers.newSingle("bounded-single"));
+		scheduler = new BoundedScheduler(Schedulers.newSingle("bounded-single"));
 		Hooks.onNextDropped(o -> onNextDropped.add(o));
 		Hooks.onErrorDropped(e -> onErrorDropped.add(e));
 		Hooks.onOperatorError((e, o) -> {
 			onOperatorError.add(e);
+			if (o != null)
+				onNextDropped.add(o);
 			return e;
 		});
 	}
@@ -61,6 +63,14 @@ public class RejectedExecutionTest {
 	@After
 	public void tearDown() {
 		scheduler.dispose();
+		Hooks.resetOnNextDropped();
+		Hooks.resetOnErrorDropped();
+		Hooks.resetOnOperatorError();
+		onNexts.clear();
+		onErrors.clear();
+		onNextDropped.clear();
+		onErrorDropped.clear();
+		onOperatorError.clear();
 	}
 
 	/**
@@ -97,7 +107,7 @@ public class RejectedExecutionTest {
 
 
 	/**
-	 * Test: onNext cannot be delivered due to RejectedExecutionExceptiob
+	 * Test: onNext cannot be delivered due to RejectedExecutionException
 	 * Current behaviour:
 	 *   No onNext, onError, onNextDropped, onErrorDropped generated
 	 *   Sequence of exceptions for each flatMap element:
@@ -202,12 +212,11 @@ public class RejectedExecutionTest {
 				.doOnRequest(n -> System.out.println("onRequest on thread " + Thread.currentThread().getName() + " " + n))
 				.subscribeOn(scheduler);
 
-		try {
-			flux.subscribe();
-		} catch (RejectedExecutionException e) {
-			e.printStackTrace();
-			// Expected exception
-		}
+		assertThatExceptionOfType(RejectedExecutionException.class)
+				.isThrownBy(flux::blockLast)
+				.withCause(new RejectedExecutionException("BoundedWorker schedule: no more tasks"))
+				.withMessage("Scheduler unavailable")
+				.withStackTraceContaining("Suppressed:");
 	}
 
 	/**
@@ -261,10 +270,10 @@ public class RejectedExecutionTest {
 			t.printStackTrace();
 			assertTrue("Unexpected exception: " + t, t.getMessage().contains("VerifySubscriber timed out"));
 		}
-		assertTrue("Too many onNexts " + onNexts.size(), onNexts.size() < 255);
-		assertEquals(0, onErrors.size()); // FIXME: RejectedExecutionException not propagated
-		assertEquals(0, onNextDropped.size()); // FIXME: onNext dropped silently
-		assertEquals(0, onErrorDropped.size()); // FIXME: onError not generated
+		assertThat(onNexts.size()).isLessThan(255);
+		assertThat(onErrors).isEmpty(); // FIXME: RejectedExecutionException
+		assertThat(onNextDropped).isEmpty(); // FIXME: onNext dropped silently
+		assertThat(onErrorDropped).isEmpty(); // FIXME: onError not generated
 	}
 
 	private void onNext(long i) {
@@ -275,6 +284,7 @@ public class RejectedExecutionTest {
 
 	private void onError(Throwable t) {
 		String thread = Thread.currentThread().getName();
+		//FIXME evaluate if and when it is legit to be on different thread
 		assertTrue("onError on the wrong thread " + thread, thread.contains("bounded"));
 		onErrors.add(t);
 	}
@@ -285,7 +295,7 @@ public class RejectedExecutionTest {
 
 		final Scheduler actual;
 
-		BoundedScheduler(int bound, Scheduler actual) {
+		BoundedScheduler(Scheduler actual) {
 			this.actual = actual;
 		}
 
@@ -297,14 +307,14 @@ public class RejectedExecutionTest {
 		@Override
 		public Disposable schedule(Runnable task) {
 			if (tasksRemaining.decrementAndGet() < 0)
-				throw new RejectedExecutionException();
+				throw new RejectedExecutionException("BoundedScheduler schedule: no more tasks");
 			return actual.schedule(task);
 		}
 
 		@Override
 		public Disposable schedule(Runnable task, long delay, TimeUnit unit) {
 			if (tasksRemaining.decrementAndGet() < 0)
-				throw new RejectedExecutionException();
+				throw new RejectedExecutionException("BoundedScheduler schedule with delay: no more tasks");
 			return actual.schedule(task, delay, unit);
 		}
 
@@ -339,7 +349,7 @@ public class RejectedExecutionTest {
 			@Override
 			public Disposable schedule(Runnable task) {
 				if (tasksRemaining.decrementAndGet() < 0)
-					throw new RejectedExecutionException();
+					throw new RejectedExecutionException("BoundedWorker schedule: no more tasks");
 				return actual.schedule(task);
 			}
 		}
