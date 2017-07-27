@@ -16,6 +16,7 @@
 package reactor.core.scheduler;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import org.assertj.core.api.Condition;
@@ -23,8 +24,11 @@ import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Test;
 import reactor.core.Disposable;
+import reactor.core.Exceptions;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.fail;
 
 /**
  * @author Stephane Maldini
@@ -70,28 +74,32 @@ public abstract class AbstractSchedulerTest {
 			CountDownLatch latch = new CountDownLatch(1);
 			CountDownLatch latch2 = shouldCheckDisposeTask() ? new CountDownLatch(1)
 					: null;
-			Disposable c = s.schedule(() -> {
-				try{
-					latch.countDown();
-					if(latch2 != null && !latch2.await(10, TimeUnit.SECONDS) &&
-							shouldCheckInterrupted()){
-						Assert.fail("Should have interrupted");
-					}
-				}
-				catch (InterruptedException e){
-				}
-			});
-			Disposable d = c;
 
-			latch.await();
-			if(shouldCheckDisposeTask()) {
-				assertThat(d.isDisposed()).isFalse();
+			try {
+				Disposable d = s.schedule(() -> {
+					try {
+						latch.countDown();
+						if (latch2 != null && !latch2.await(10,
+								TimeUnit.SECONDS) && shouldCheckInterrupted()) {
+							Assert.fail("Should have interrupted");
+						}
+					}
+					catch (InterruptedException e) {
+					}
+				});
+
+				latch.await();
+				if(shouldCheckDisposeTask()) {
+					assertThat(d.isDisposed()).isFalse();
+				}
+				else{
+					d.isDisposed(); //noop
+				}
+				d.dispose();
+				d.dispose();//noop
+			} catch (Throwable schedulingError) {
+				fail("unexpected scheduling error", schedulingError);
 			}
-			else{
-				d.isDisposed(); //noop
-			}
-			d.dispose();
-			d.dispose();//noop
 
 			Thread.yield();
 
@@ -111,23 +119,28 @@ public abstract class AbstractSchedulerTest {
 			}
 
 
-			c = s.schedule(() -> {
-				if(unwrapped == null && shouldCheckInterrupted()){
-					try {
-						Thread.sleep(10000);
+			try {
+				Disposable d = s.schedule(() -> {
+					if(unwrapped == null && shouldCheckInterrupted()){
+						try {
+							Thread.sleep(10000);
+						}
+						catch (InterruptedException e) {
+							Thread.currentThread().interrupt();
+						}
 					}
-					catch (InterruptedException e) {
-						Thread.currentThread().interrupt();
-					}
-				}
-			});
+				});
 
-			d = c;
-			if(unwrapped == null) {
-				assertThat(c).isEqualTo(Scheduler.REJECTED);
+				d.dispose();
+				assertThat(d.isDisposed()).isTrue();
+			} catch (Throwable schedulingError) {
+				if (unwrapped == null) {
+					assertThat(schedulingError).isInstanceOf(RejectedExecutionException.class);
+				}
+				else {
+					fail("unexpected scheduling error", schedulingError);
+				}
 			}
-			d.dispose();
-			assertThat(d.isDisposed()).isTrue();
 		}
 		finally {
 			s.dispose();
@@ -145,25 +158,29 @@ public abstract class AbstractSchedulerTest {
 			CountDownLatch latch = new CountDownLatch(1);
 			CountDownLatch latch2 = shouldCheckDisposeTask() ? new CountDownLatch(1)
 					: null;
-			Disposable c = w.schedule(() -> {
-				try{
-					latch.countDown();
-					if(latch2 != null && !latch2.await(10, TimeUnit.SECONDS) &&
-							shouldCheckInterrupted()){
-						Assert.fail("Should have interrupted");
-					}
-				}
-				catch (InterruptedException e){
-				}
-			});
-			Disposable d = c;
 
-			latch.await();
-			if(shouldCheckDisposeTask()) {
-				assertThat(d.isDisposed()).isFalse();
+			try {
+				Disposable d = w.schedule(() -> {
+					try{
+						latch.countDown();
+						if(latch2 != null && !latch2.await(10, TimeUnit.SECONDS) &&
+								shouldCheckInterrupted()){
+							Assert.fail("Should have interrupted");
+						}
+					}
+					catch (InterruptedException e){
+					}
+				});
+
+				latch.await();
+				if(shouldCheckDisposeTask()) {
+					assertThat(d.isDisposed()).isFalse();
+				}
+				d.dispose();
+				d.dispose();//noop
+			} catch (Throwable schedulingError) {
+				fail("unexpected scheduling error", schedulingError);
 			}
-			d.dispose();
-			d.dispose();//noop
 
 			Thread.yield();
 
@@ -203,11 +220,9 @@ public abstract class AbstractSchedulerTest {
 				}
 			}
 
-			c = w.schedule(() -> {});
-			d = c;
-
-			assertThat(c).isEqualTo(Scheduler.REJECTED);
-			assertThat(d.isDisposed()).isTrue();
+			assertThatExceptionOfType(RejectedExecutionException.class)
+					.isThrownBy(() -> w.schedule(() -> {}))
+					.isSameAs(Exceptions.REJECTED_EXECUTION);
 		}
 		finally {
 			s.dispose();
@@ -232,7 +247,7 @@ public abstract class AbstractSchedulerTest {
 				catch (InterruptedException e) {
 				}
 			}, 10, TimeUnit.MILLISECONDS);
-			assertThat(d).isNotSameAs(Scheduler.REJECTED);
+			//will throw if not scheduled
 
 			latch.await();
 			assertThat(d.isDisposed()).isFalse();
@@ -245,13 +260,15 @@ public abstract class AbstractSchedulerTest {
 			s.dispose();
 			assertThat(s).is(DISPOSED_OR_CACHED);
 
-			d = s.schedule(() -> { });
-
 			if (!(s instanceof Schedulers.CachedScheduler)) {
-				assertThat(d).isSameAs(Scheduler.REJECTED);
+				assertThatExceptionOfType(RejectedExecutionException.class)
+						.isThrownBy(() -> s.schedule(() -> { }));
 			}
-			d.dispose();
-			assertThat(d.isDisposed()).isTrue();
+			else {
+				d = s.schedule(() -> { });
+				d.dispose();
+				assertThat(d.isDisposed()).isTrue();
+			}
 		}
 		finally {
 			s.dispose();
@@ -277,7 +294,7 @@ public abstract class AbstractSchedulerTest {
 				catch (InterruptedException e) {
 				}
 			}, 10, TimeUnit.MILLISECONDS);
-			assertThat(d).isNotSameAs(Scheduler.REJECTED);
+			//will throw if rejected
 
 			latch.await();
 			assertThat(d.isDisposed()).isFalse();
@@ -290,12 +307,9 @@ public abstract class AbstractSchedulerTest {
 			w.dispose();
 			assertThat(w.isDisposed()).isTrue();
 
-			d = w.schedule(() -> { });
-
-			assertThat(d).isEqualTo(Scheduler.REJECTED);
-			assertThat(d.isDisposed()).isTrue();
-			d.dispose();
-			assertThat(d.isDisposed()).isTrue();
+			assertThatExceptionOfType(RejectedExecutionException.class)
+					.isThrownBy(() -> w.schedule(() -> { }))
+					.isSameAs(Exceptions.REJECTED_EXECUTION);
 		}
 		finally {
 			w.dispose();
@@ -322,7 +336,7 @@ public abstract class AbstractSchedulerTest {
 				catch (InterruptedException e) {
 				}
 			}, 10, 10, TimeUnit.MILLISECONDS);
-			assertThat(d).isNotSameAs(Scheduler.REJECTED);
+			//will throw if rejected
 
 			assertThat(d.isDisposed()).isFalse();
 
@@ -336,6 +350,7 @@ public abstract class AbstractSchedulerTest {
 			s.dispose();
 			assertThat(s).is(DISPOSED_OR_CACHED);
 
+			//will throw if rejected
 			d = s.schedule(() -> { });
 
 			d.dispose();
@@ -366,7 +381,7 @@ public abstract class AbstractSchedulerTest {
 				}
 			}, 10, 10, TimeUnit.MILLISECONDS);
 			Disposable d = c;
-			assertThat(d).isNotSameAs(Scheduler.REJECTED);
+			//will throw if rejected
 
 			latch.await();
 			assertThat(d.isDisposed()).isFalse();
@@ -379,15 +394,9 @@ public abstract class AbstractSchedulerTest {
 			w.dispose();
 			assertThat(w.isDisposed()).isTrue();
 
-			c = w.schedule(() -> {
-			});
-
-			assertThat(c).isEqualTo(Scheduler.REJECTED);
-
-			d = c;
-			assertThat(d.isDisposed()).isTrue();
-			d.dispose();
-			assertThat(d.isDisposed()).isTrue();
+			assertThatExceptionOfType(RejectedExecutionException.class)
+					.isThrownBy(() -> w.schedule(() -> { }))
+					.isSameAs(Exceptions.REJECTED_EXECUTION);
 		}
 		finally {
 			w.dispose();

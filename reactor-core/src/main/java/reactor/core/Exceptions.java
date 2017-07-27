@@ -17,6 +17,7 @@
 package reactor.core;
 
 import java.util.Objects;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import javax.annotation.Nullable;
 
@@ -172,6 +173,19 @@ public abstract class Exceptions {
 	public static IllegalStateException failWithOverflow(String message) {
 		return new OverflowException(message);
 	}
+
+	/**
+	 * @return
+	 */
+	public static RejectedExecutionException failWithRejected() {
+		return new RejectedExecutionException("Scheduler unavailable");
+	}
+
+	public static RejectedExecutionException failWithRejected(Throwable cause) {
+		return new RejectedExecutionException("Scheduler unavailable", cause);
+	}
+
+	public static final RejectedExecutionException REJECTED_EXECUTION = new RejectedExecutionException("Scheduler unavailable");
 
 	/**
 	 * Check if the given exception represents an {@link #failWithOverflow() overflow}.
