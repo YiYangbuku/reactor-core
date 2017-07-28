@@ -26,9 +26,9 @@ import reactor.core.Disposable;
  * (allowing further reuse of the container) or {@link #dispose()} (disallowing further
  * reuse of the container).
  * <p>
- * Two removal operations are offered: {@link #delete(Disposable)} will NOT call
+ * Two removal operations are offered: {@link #remove(Disposable)} will NOT call
  * {@link Disposable#dispose()} on the element removed from the container, while
- * {@link #remove(Disposable)} will.
+ * {@link #removeAndDispose(Disposable)} will.
  *
  * @author Simon Baslé
  */
@@ -74,22 +74,22 @@ public interface CompositeDisposable<T extends Disposable> extends Disposable {
 	/**
 	 * Delete the {@link Disposable} from this container, without disposing it.
 	 *
-	 * @param d the {@link Disposable} to delete.
+	 * @param d the {@link Disposable} to remove.
 	 * @return true if the disposable was successfully deleted, false otherwise.
-	 * @see #remove(Disposable)
+	 * @see #removeAndDispose(Disposable)
 	 */
-	boolean delete(T d);
+	boolean remove(T d);
 
 	/**
-	 * Remove the {@link Disposable} from this container, that is delete it from the
-	 * container and dispose it via {@link Disposable#dispose() dispose()} once deleted.
+	 * Remove the {@link Disposable} from this container and dispose it via
+	 * {@link Disposable#dispose() dispose()} once deleted.
 	 *
 	 * @param disposable the {@link Disposable} to remove and dispose.
 	 * @return true if the disposable was successfully removed and disposed, false otherwise.
-	 * @see #delete(Disposable)
+	 * @see #remove(Disposable)
 	 */
-	default boolean remove(T disposable) {
-		if (delete(disposable)) {
+	default boolean removeAndDispose(T disposable) {
+		if (remove(disposable)) {
 			disposable.dispose();
 			return true;
 		}

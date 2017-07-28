@@ -139,7 +139,7 @@ final class AtomicCompositeDisposable implements CompositeDisposable<Disposable>
 	}
 
 	@Override
-	public boolean delete(Disposable d) {
+	public boolean remove(Disposable d) {
 		Objects.requireNonNull(d, "Disposable item is null");
 		if (disposed) {
 			return false;

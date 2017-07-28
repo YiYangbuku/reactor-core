@@ -170,7 +170,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 				}
 			}
 			catch (RejectedExecutionException ree) {
-				remove(sr);
+				removeAndDispose(sr);
 			}
 			return REJECTED;
 		}
@@ -192,7 +192,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 				}
 			}
 			catch (RejectedExecutionException ree) {
-				remove(sr);
+				removeAndDispose(sr);
 			}
 			return REJECTED;
 		}
@@ -214,7 +214,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 				}
 			}
 			catch (RejectedExecutionException ree) {
-				remove(sr);
+				removeAndDispose(sr);
 			}
 			return REJECTED;
 		}
@@ -235,7 +235,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 		}
 
 		@Override
-		public boolean delete(ExecutorServiceSchedulerRunnable sr) {
+		public boolean remove(ExecutorServiceSchedulerRunnable sr) {
 			if (!terminated) {
 				synchronized (this) {
 					if (!terminated) {
@@ -345,7 +345,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 			finally {
 				ExecutorServiceWorker o = parent;
 				if (o != DISPOSED_PARENT && o != null && PARENT.compareAndSet(this, o, DONE_PARENT)) {
-					o.delete(this);
+					o.remove(this);
 				}
 
 				Future f;
@@ -401,7 +401,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 					return;
 				}
 				if (PARENT.compareAndSet(this, o, DISPOSED_PARENT)) {
-					o.delete(this);
+					o.remove(this);
 					return;
 				}
 			}

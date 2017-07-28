@@ -39,12 +39,12 @@ final class EmptyDisposableContainer<T extends Disposable> implements CompositeD
 	}
 
 	@Override
-	public boolean delete(T d) {
+	public boolean remove(T d) {
 		return false;
 	}
 
 	@Override
-	public boolean remove(T disposable) {
+	public boolean removeAndDispose(T disposable) {
 		return false;
 	}
 
