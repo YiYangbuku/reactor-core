@@ -135,7 +135,7 @@ public class FluxWindowTimeOrSizeTest {
 		Scheduler testScheduler = new Scheduler() {
 			@Override
 			public Disposable schedule(Runnable task) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 
 			@Override
@@ -143,7 +143,7 @@ public class FluxWindowTimeOrSizeTest {
 				return new Worker() {
 					@Override
 					public Disposable schedule(Runnable task) {
-						throw Exceptions.REJECTED_EXECUTION;
+						throw Exceptions.failWithRejected();
 					}
 
 					@Override
@@ -165,7 +165,7 @@ public class FluxWindowTimeOrSizeTest {
 		Scheduler testScheduler = new Scheduler() {
 			@Override
 			public Disposable schedule(Runnable task) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 
 			@Override
@@ -176,13 +176,13 @@ public class FluxWindowTimeOrSizeTest {
 
 					@Override
 					public Disposable schedule(Runnable task) {
-						throw Exceptions.REJECTED_EXECUTION;
+						throw Exceptions.failWithRejected();
 					}
 
 					@Override
 					public Disposable schedule(Runnable task, long delay, TimeUnit unit) {
 						if (reject.get())
-							throw Exceptions.REJECTED_EXECUTION;
+							throw Exceptions.failWithRejected();
 						return delegate.schedule(task, delay, unit);
 					}
 

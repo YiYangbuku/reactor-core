@@ -27,7 +27,6 @@ import javax.annotation.Nullable;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import reactor.core.CoreSubscriber;
-import reactor.core.Disposable;
 import reactor.core.Exceptions;
 import reactor.core.Fuseable;
 import reactor.core.scheduler.Scheduler;
@@ -216,7 +215,7 @@ final class FluxPublishOn<T> extends FluxOperator<T, T> implements Fuseable {
 		@Override
 		public void onNext(T t) {
 			if (sourceMode == ASYNC) {
-				trySchedule(this, null, null /* t */);
+				trySchedule(this, null, null /* t always null */);
 				return;
 			}
 
@@ -250,15 +249,16 @@ final class FluxPublishOn<T> extends FluxOperator<T, T> implements Fuseable {
 				return;
 			}
 			done = true;
-			trySchedule(null, null, null, !worker.isDisposed());
+			//WIP also guards, no competing onNext
+			trySchedule(null, null, null);
 		}
 
 		@Override
 		public void request(long n) {
 			if (Operators.validate(n)) {
 				Operators.getAndAddCap(REQUESTED, this, n);
-				trySchedule(this, null, null,
-						(!worker.isDisposed() || scheduler.isDisposed()));
+				//WIP also guards during request and onError is possible
+				trySchedule(this, null, null);
 			}
 		}
 
@@ -281,14 +281,6 @@ final class FluxPublishOn<T> extends FluxOperator<T, T> implements Fuseable {
 				@Nullable Subscription subscription,
 				@Nullable Throwable suppressed,
 				@Nullable Object dataSignal) {
-			trySchedule(subscription, suppressed, dataSignal, true);
-		}
-
-		void trySchedule(
-				@Nullable Subscription subscription,
-				@Nullable Throwable suppressed,
-				@Nullable Object dataSignal,
-				boolean additionalCondition) {
 			if (WIP.getAndIncrement(this) != 0) {
 				return;
 			}
@@ -297,11 +289,7 @@ final class FluxPublishOn<T> extends FluxOperator<T, T> implements Fuseable {
 				worker.schedule(this);
 			}
 			catch (RejectedExecutionException ree) {
-				if (additionalCondition) {
-					//FIXME invoke onError should be possible here thanks to WIP guard
-					throw Operators.onRejectedExecution(ree, subscription, suppressed, dataSignal);
-				}
-				//FIXME log the ree otherwise?
+				actual.onError(Operators.onRejectedExecution(ree, subscription, suppressed, dataSignal));
 			}
 		}
 
@@ -741,15 +729,14 @@ final class FluxPublishOn<T> extends FluxOperator<T, T> implements Fuseable {
 				return;
 			}
 			done = true;
-			trySchedule(null, null, null, !worker.isDisposed());
+			trySchedule(null, null, null);
 		}
 
 		@Override
 		public void request(long n) {
 			if (Operators.validate(n)) {
 				Operators.getAndAddCap(REQUESTED, this, n);
-				trySchedule(this, null, null,
-						(!worker.isDisposed() || scheduler.isDisposed()));
+				trySchedule(this, null, null);
 			}
 		}
 
@@ -772,14 +759,6 @@ final class FluxPublishOn<T> extends FluxOperator<T, T> implements Fuseable {
 				@Nullable Subscription subscription,
 				@Nullable Throwable suppressed,
 				@Nullable Object dataSignal) {
-			trySchedule(subscription, suppressed, dataSignal, true);
-		}
-
-		void trySchedule(
-				@Nullable Subscription subscription,
-				@Nullable Throwable suppressed,
-				@Nullable Object dataSignal,
-				boolean additionalCondition) {
 			if (WIP.getAndIncrement(this) != 0) {
 				return;
 			}
@@ -788,10 +767,7 @@ final class FluxPublishOn<T> extends FluxOperator<T, T> implements Fuseable {
 				worker.schedule(this);
 			}
 			catch (RejectedExecutionException ree) {
-				if (additionalCondition)
-					//FIXME thanks to WIP guard it should be possible to invoke onError here
-					throw Operators.onRejectedExecution(ree, subscription, suppressed, dataSignal);
-				//FIXME log the other case?
+				throw Operators.onRejectedExecution(ree, subscription, suppressed, dataSignal);
 			}
 		}
 

@@ -175,17 +175,19 @@ public abstract class Exceptions {
 	}
 
 	/**
-	 * @return
+	 * @return a singleton {@link RejectedExecutionException}
 	 */
 	public static RejectedExecutionException failWithRejected() {
-		return new RejectedExecutionException("Scheduler unavailable");
+		return REJECTED_EXECUTION;
 	}
 
+	/**
+	 * @param cause
+	 * @return return a new {@link RejectedExecutionException} with standard message and cause
+	 */
 	public static RejectedExecutionException failWithRejected(Throwable cause) {
 		return new RejectedExecutionException("Scheduler unavailable", cause);
 	}
-
-	public static final RejectedExecutionException REJECTED_EXECUTION = new RejectedExecutionException("Scheduler unavailable");
 
 	/**
 	 * Check if the given exception represents an {@link #failWithOverflow() overflow}.
@@ -331,6 +333,8 @@ public abstract class Exceptions {
 
 	Exceptions() {
 	}
+
+	static final RejectedExecutionException REJECTED_EXECUTION = new RejectedExecutionException("Scheduler unavailable");
 
 	static class BubblingException extends ReactiveException {
 

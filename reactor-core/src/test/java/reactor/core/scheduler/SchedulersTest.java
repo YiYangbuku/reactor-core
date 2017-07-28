@@ -235,27 +235,6 @@ public class SchedulersTest {
 		service.dispose();
 	}
 
-	Scheduler.Worker runTest(final Scheduler.Worker dispatcher)
-			throws InterruptedException {
-		CountDownLatch tasksCountDown = new CountDownLatch(N);
-
-		dispatcher.schedule(() -> {
-			for (int i = 0; i < N; i++) {
-				dispatcher.schedule(tasksCountDown::countDown);
-			}
-		});
-
-		boolean check = tasksCountDown.await(10, TimeUnit.SECONDS);
-		if (exceptionThrown.get() != null) {
-			exceptionThrown.get()
-			               .printStackTrace();
-		}
-		Assert.assertTrue(exceptionThrown.get() == null);
-		Assert.assertTrue(check);
-
-		return dispatcher;
-	}
-
 	@Test
 	public void immediateTaskIsExecuted() throws Exception {
 		Scheduler serviceRB = Schedulers.newSingle("rbWork");

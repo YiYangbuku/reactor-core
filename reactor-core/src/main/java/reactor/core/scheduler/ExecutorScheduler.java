@@ -51,7 +51,7 @@ final class ExecutorScheduler implements Scheduler {
 	@Override
 	public Disposable schedule(Runnable task) {
 		if(terminated){
-			throw Exceptions.REJECTED_EXECUTION;
+			throw Exceptions.failWithRejected();
 		}
 		Objects.requireNonNull(task, "task");
 		ExecutorPlainRunnable r = new ExecutorPlainRunnable(task);
@@ -204,13 +204,13 @@ final class ExecutorScheduler implements Scheduler {
 		public Disposable schedule(Runnable task) {
 			Objects.requireNonNull(task, "task");
 			if (terminated) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 
 			ExecutorTrackedRunnable r = new ExecutorTrackedRunnable(task, this, true);
 			synchronized (this) {
 				if (terminated) {
-					throw Exceptions.REJECTED_EXECUTION;
+					throw Exceptions.failWithRejected();
 				}
 				tasks.add(r);
 			}
@@ -225,7 +225,7 @@ final class ExecutorScheduler implements Scheduler {
 					}
 				}
 				Schedulers.handleError(ex);
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 
 			return r;
@@ -298,13 +298,13 @@ final class ExecutorScheduler implements Scheduler {
 		public Disposable schedule(Runnable task) {
 			Objects.requireNonNull(task, "task");
 			if (terminated) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 
 			ExecutorTrackedRunnable r = new ExecutorTrackedRunnable(task, this, false);
 			synchronized (this) {
 				if (terminated) {
-					throw Exceptions.REJECTED_EXECUTION;
+					throw Exceptions.failWithRejected();
 				}
 				queue.offer(r);
 			}
@@ -316,7 +316,7 @@ final class ExecutorScheduler implements Scheduler {
 				catch (Throwable ex) {
 					r.dispose();
 					Schedulers.handleError(ex);
-					throw Exceptions.REJECTED_EXECUTION;
+					throw Exceptions.failWithRejected();
 				}
 			}
 

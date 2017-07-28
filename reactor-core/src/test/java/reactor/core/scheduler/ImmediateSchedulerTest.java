@@ -62,17 +62,17 @@ public class ImmediateSchedulerTest extends AbstractSchedulerTest {
 		try {
 			assertThatExceptionOfType(RejectedExecutionException.class)
 					.isThrownBy(() -> scheduler.schedule(() -> { }, 100, TimeUnit.MILLISECONDS))
-					.isSameAs(Exceptions.REJECTED_EXECUTION);
+					.isSameAs(Exceptions.failWithRejected());
 			assertThatExceptionOfType(RejectedExecutionException.class)
 					.isThrownBy(() -> scheduler.schedulePeriodically(() -> { }, 100, 100, TimeUnit.MILLISECONDS))
-					.isSameAs(Exceptions.REJECTED_EXECUTION);
+					.isSameAs(Exceptions.failWithRejected());
 
 			assertThatExceptionOfType(RejectedExecutionException.class)
 					.isThrownBy(() -> worker.schedule(() -> { }, 100, TimeUnit.MILLISECONDS))
-					.isSameAs(Exceptions.REJECTED_EXECUTION);
+					.isSameAs(Exceptions.failWithRejected());
 			assertThatExceptionOfType(RejectedExecutionException.class)
 					.isThrownBy(() -> worker.schedulePeriodically(() -> { }, 100, 100, TimeUnit.MILLISECONDS))
-					.isSameAs(Exceptions.REJECTED_EXECUTION);
+					.isSameAs(Exceptions.failWithRejected());
 		}
 		finally {
 			worker.dispose();

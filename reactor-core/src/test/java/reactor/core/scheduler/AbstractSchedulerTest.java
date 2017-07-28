@@ -19,25 +19,18 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
-import org.assertj.core.api.Condition;
 import org.junit.Assert;
-import org.junit.Assume;
+import org.junit.Before;
 import org.junit.Test;
 import reactor.core.Disposable;
 import reactor.core.Exceptions;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.assertj.core.api.Assertions.fail;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * @author Stephane Maldini
  */
 public abstract class AbstractSchedulerTest {
-
-	static final Condition<Scheduler> DISPOSED_OR_CACHED =
-			new Condition<>(sched -> sched instanceof Schedulers.CachedScheduler || sched.isDisposed(),
-			"a %s scheduler", "disposed or cached");
 
 	protected abstract Scheduler scheduler();
 
@@ -57,17 +50,14 @@ public abstract class AbstractSchedulerTest {
 
 	protected boolean shouldCheckWorkerTimeScheduling() { return true; }
 
+	@Before
+	public void checkNotCached() {
+		assertThat(scheduler()).isNotInstanceOf(Schedulers.CachedScheduler.class);
+	}
+
 	@Test(timeout = 10000)
 	final public void directScheduleAndDispose() throws Exception {
 		Scheduler s = scheduler();
-		Scheduler unwrapped;
-		if(s instanceof Schedulers.CachedScheduler){
-			unwrapped = ((Schedulers.CachedScheduler)s).get();
-			assertThat(unwrapped).isNotNull();
-		}
-		else {
-			unwrapped = null;
-		}
 
 		try {
 			assertThat(s.isDisposed()).isFalse();
@@ -107,21 +97,17 @@ public abstract class AbstractSchedulerTest {
 				latch2.countDown();
 			}
 
-
 			s.dispose();
 			s.dispose();//noop
 
 			if(s == ImmediateScheduler.instance()){
 				return;
 			}
-			if(unwrapped == null) {
-				assertThat(s.isDisposed()).isTrue();
-			}
-
+			assertThat(s.isDisposed()).isTrue();
 
 			try {
 				Disposable d = s.schedule(() -> {
-					if(unwrapped == null && shouldCheckInterrupted()){
+					if(shouldCheckInterrupted()){
 						try {
 							Thread.sleep(10000);
 						}
@@ -134,12 +120,7 @@ public abstract class AbstractSchedulerTest {
 				d.dispose();
 				assertThat(d.isDisposed()).isTrue();
 			} catch (Throwable schedulingError) {
-				if (unwrapped == null) {
-					assertThat(schedulingError).isInstanceOf(RejectedExecutionException.class);
-				}
-				else {
-					fail("unexpected scheduling error", schedulingError);
-				}
+				assertThat(schedulingError).isInstanceOf(RejectedExecutionException.class);
 			}
 		}
 		finally {
@@ -189,22 +170,30 @@ public abstract class AbstractSchedulerTest {
 			}
 
 			Disposable[] massCancel;
+			boolean hasErrors = false;
 			if(shouldCheckMassWorkerDispose()) {
 				int n = 10;
 				massCancel = new Disposable[n];
+				Throwable[] errors = new Throwable[n];
 				Thread current = Thread.currentThread();
 				for(int i = 0; i< n; i++){
-					massCancel[i] = w.schedule(() -> {
-						if(current == Thread.currentThread()){
-							return;
-						}
-						try{
-							Thread.sleep(5000);
-						}
-						catch (InterruptedException ie){
+					try {
+						massCancel[i] = w.schedule(() -> {
+							if(current == Thread.currentThread()){
+								return;
+							}
+							try{
+								Thread.sleep(5000);
+							}
+							catch (InterruptedException ie){
 
-						}
-					});
+							}
+						});
+					}
+					catch (RejectedExecutionException ree) {
+						errors[i] = ree;
+						hasErrors = true;
+					}
 				}
 			}
 			else{
@@ -215,6 +204,7 @@ public abstract class AbstractSchedulerTest {
 			assertThat(w.isDisposed()).isTrue();
 
 			if(massCancel != null){
+				assertThat(hasErrors).as("mass cancellation errors").isFalse();
 				for(Disposable _d : massCancel){
 					assertThat(_d.isDisposed()).isTrue();
 				}
@@ -222,7 +212,7 @@ public abstract class AbstractSchedulerTest {
 
 			assertThatExceptionOfType(RejectedExecutionException.class)
 					.isThrownBy(() -> w.schedule(() -> {}))
-					.isSameAs(Exceptions.REJECTED_EXECUTION);
+					.isSameAs(Exceptions.failWithRejected());
 		}
 		finally {
 			s.dispose();
@@ -232,11 +222,19 @@ public abstract class AbstractSchedulerTest {
 
 	@Test(timeout = 10000)
 	final public void directScheduleAndDisposeDelay() throws Exception {
-		Assume.assumeTrue("Scheduler marked as not supporting time scheduling", shouldCheckDirectTimeScheduling());
 		Scheduler s = scheduler();
 
 		try {
 			assertThat(s.isDisposed()).isFalse();
+
+			if (!shouldCheckDirectTimeScheduling()) {
+				assertThatExceptionOfType(RejectedExecutionException.class)
+						.isThrownBy(() -> s.schedule(() -> { }, 10, TimeUnit.MILLISECONDS))
+						.as("Scheduler marked as not supporting time scheduling")
+						.isSameAs(Exceptions.failWithRejected());
+				return;
+			}
+
 			CountDownLatch latch = new CountDownLatch(1);
 			CountDownLatch latch2 = new CountDownLatch(1);
 			Disposable d = s.schedule(() -> {
@@ -258,17 +256,10 @@ public abstract class AbstractSchedulerTest {
 			latch2.countDown();
 
 			s.dispose();
-			assertThat(s).is(DISPOSED_OR_CACHED);
+			assertThat(s.isDisposed()).isTrue();
 
-			if (!(s instanceof Schedulers.CachedScheduler)) {
-				assertThatExceptionOfType(RejectedExecutionException.class)
-						.isThrownBy(() -> s.schedule(() -> { }));
-			}
-			else {
-				d = s.schedule(() -> { });
-				d.dispose();
-				assertThat(d.isDisposed()).isTrue();
-			}
+			assertThatExceptionOfType(RejectedExecutionException.class)
+					.isThrownBy(() -> s.schedule(() -> { }));
 		}
 		finally {
 			s.dispose();
@@ -277,13 +268,20 @@ public abstract class AbstractSchedulerTest {
 
 	@Test(timeout = 10000)
 	final public void workerScheduleAndDisposeDelay() throws Exception {
-		Assume.assumeTrue("Worker marked as not supporting time scheduling", shouldCheckWorkerTimeScheduling());
 		Scheduler s = scheduler();
 		Scheduler.Worker w = s.createWorker();
 
 		try {
-
 			assertThat(w.isDisposed()).isFalse();
+
+			if (!shouldCheckWorkerTimeScheduling()) {
+				assertThatExceptionOfType(RejectedExecutionException.class)
+						.isThrownBy(() -> w.schedule(() -> { }, 10, TimeUnit.MILLISECONDS))
+						.as("Worker marked as not supporting time scheduling")
+						.isSameAs(Exceptions.failWithRejected());
+				return;
+			}
+
 			CountDownLatch latch = new CountDownLatch(1);
 			CountDownLatch latch2 = new CountDownLatch(1);
 			Disposable d = w.schedule(() -> {
@@ -309,7 +307,7 @@ public abstract class AbstractSchedulerTest {
 
 			assertThatExceptionOfType(RejectedExecutionException.class)
 					.isThrownBy(() -> w.schedule(() -> { }))
-					.isSameAs(Exceptions.REJECTED_EXECUTION);
+					.isSameAs(Exceptions.failWithRejected());
 		}
 		finally {
 			w.dispose();
@@ -319,11 +317,19 @@ public abstract class AbstractSchedulerTest {
 
 	@Test(timeout = 10000)
 	final public void directScheduleAndDisposePeriod() throws Exception {
-		Assume.assumeTrue("Scheduler marked as not supporting time scheduling", shouldCheckDirectTimeScheduling());
 		Scheduler s = scheduler();
 
 		try {
 			assertThat(s.isDisposed()).isFalse();
+
+			if (!shouldCheckDirectTimeScheduling()) {
+				assertThatExceptionOfType(RejectedExecutionException.class)
+						.isThrownBy(() -> s.schedule(() -> { }, 10, TimeUnit.MILLISECONDS))
+						.as("Scheduler marked as not supporting time scheduling")
+						.isSameAs(Exceptions.failWithRejected());
+				return;
+			}
+
 			CountDownLatch latch = new CountDownLatch(2);
 			CountDownLatch latch2 = new CountDownLatch(1);
 			Disposable d = s.schedulePeriodically(() -> {
@@ -348,13 +354,10 @@ public abstract class AbstractSchedulerTest {
 			latch2.countDown();
 
 			s.dispose();
-			assertThat(s).is(DISPOSED_OR_CACHED);
+			assertThat(s.isDisposed()).isTrue();
 
-			//will throw if rejected
-			d = s.schedule(() -> { });
-
-			d.dispose();
-			assertThat(d.isDisposed()).isTrue();
+			assertThatExceptionOfType(RejectedExecutionException.class)
+					.isThrownBy(() -> s.schedule(() -> { }));
 		}
 		finally {
 			s.dispose();
@@ -363,13 +366,20 @@ public abstract class AbstractSchedulerTest {
 
 	@Test(timeout = 10000)
 	final public void workerScheduleAndDisposePeriod() throws Exception {
-		Assume.assumeTrue("Worker marked as not supporting time scheduling", shouldCheckWorkerTimeScheduling());
 		Scheduler s = scheduler();
 		Scheduler.Worker w = s.createWorker();
 
 		try {
-
 			assertThat(w.isDisposed()).isFalse();
+
+			if (!shouldCheckWorkerTimeScheduling()) {
+				assertThatExceptionOfType(RejectedExecutionException.class)
+						.isThrownBy(() -> w.schedule(() -> { }, 10, TimeUnit.MILLISECONDS))
+						.as("Worker marked as not supporting time scheduling")
+						.isSameAs(Exceptions.failWithRejected());
+				return;
+			}
+
 			CountDownLatch latch = new CountDownLatch(1);
 			CountDownLatch latch2 = new CountDownLatch(1);
 			Disposable c = w.schedulePeriodically(() -> {
@@ -396,7 +406,7 @@ public abstract class AbstractSchedulerTest {
 
 			assertThatExceptionOfType(RejectedExecutionException.class)
 					.isThrownBy(() -> w.schedule(() -> { }))
-					.isSameAs(Exceptions.REJECTED_EXECUTION);
+					.isSameAs(Exceptions.failWithRejected());
 		}
 		finally {
 			w.dispose();

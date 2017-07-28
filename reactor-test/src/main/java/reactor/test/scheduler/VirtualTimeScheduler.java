@@ -234,7 +234,7 @@ public class VirtualTimeScheduler implements Scheduler {
 	@Override
 	public Disposable schedule(Runnable task) {
 		if (shutdown) {
-			throw Exceptions.REJECTED_EXECUTION;
+			throw Exceptions.failWithRejected();
 		}
 		return createWorker().schedule(task);
 	}
@@ -242,7 +242,7 @@ public class VirtualTimeScheduler implements Scheduler {
 	@Override
 	public Disposable schedule(Runnable task, long delay, TimeUnit unit) {
 		if (shutdown) {
-			throw Exceptions.REJECTED_EXECUTION;
+			throw Exceptions.failWithRejected();
 		}
 		return createWorker().schedule(task, delay, unit);
 	}
@@ -271,7 +271,7 @@ public class VirtualTimeScheduler implements Scheduler {
 			long initialDelay,
 			long period, TimeUnit unit) {
 		if (shutdown) {
-			throw Exceptions.REJECTED_EXECUTION;
+			throw Exceptions.failWithRejected();
 		}
 
 		final Worker w = createWorker();
@@ -359,7 +359,7 @@ public class VirtualTimeScheduler implements Scheduler {
 		@Override
 		public Disposable schedule(Runnable run) {
 			if (shutdown) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 			final TimedRunnable timedTask = new TimedRunnable(this,
 					0,
@@ -372,7 +372,7 @@ public class VirtualTimeScheduler implements Scheduler {
 		@Override
 		public Disposable schedule(Runnable run, long delayTime, TimeUnit unit) {
 			if (shutdown) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 			final TimedRunnable timedTask = new TimedRunnable(this,
 					nanoTime + unit.toNanos(delayTime),

@@ -76,7 +76,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 	@Override
 	public Disposable schedule(Runnable task, long delay, TimeUnit unit) {
 		if (!isTimeCapable()) {
-			throw Exceptions.REJECTED_EXECUTION;
+			throw Exceptions.failWithRejected();
 		}
 
 		ScheduledExecutorService scheduledExecutor = (ScheduledExecutorService) executor;
@@ -88,7 +88,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 	@Override
 	public Disposable schedulePeriodically(Runnable task, long initialDelay, long period, TimeUnit unit) {
 		if (!isTimeCapable()) {
-			throw Exceptions.REJECTED_EXECUTION;
+			throw Exceptions.failWithRejected();
 		}
 
 		ScheduledExecutorService scheduledExecutor = (ScheduledExecutorService) executor;
@@ -162,13 +162,13 @@ final class ExecutorServiceScheduler implements Scheduler {
 				//RejectedExecutionException are propagated up
 				throw ree;
 			}
-			throw Exceptions.REJECTED_EXECUTION;
+			throw Exceptions.failWithRejected();
 		}
 
 		@Override
 		public Disposable schedule(Runnable t, long delay, TimeUnit unit) {
 			if (!isTimeCapable()) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 
 			ScheduledExecutorService scheduledExecutor = (ScheduledExecutorService) executor;
@@ -186,13 +186,13 @@ final class ExecutorServiceScheduler implements Scheduler {
 				//RejectedExecutionException are propagated up
 				throw ree;
 			}
-			throw Exceptions.REJECTED_EXECUTION;
+			throw Exceptions.failWithRejected();
 		}
 
 		@Override
 		public Disposable schedulePeriodically(Runnable t, long initialDelay, long period, TimeUnit unit) {
 			if (!isTimeCapable()) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 
 			ScheduledExecutorService scheduledExecutor = (ScheduledExecutorService) executor;
@@ -210,7 +210,8 @@ final class ExecutorServiceScheduler implements Scheduler {
 				//RejectedExecutionException are propagated up
 				throw ree;
 			}
-			throw Exceptions.REJECTED_EXECUTION; //TODO for case where not added but not rejected, simplify these patterns?
+			//TODO for case where not added but not rejected, simplify these patterns?
+			throw Exceptions.failWithRejected();
 		}
 
 

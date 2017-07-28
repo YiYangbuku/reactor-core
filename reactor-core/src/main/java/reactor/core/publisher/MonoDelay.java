@@ -57,8 +57,7 @@ final class MonoDelay extends Mono<Long> {
 			r.setCancel(f);
 		}
 		catch (RejectedExecutionException ree) {
-			if(r.cancel != Disposables.DISPOSED &&
-					r.cancel != MonoDelayRunnable.FINISHED) {
+			if(r.cancel != Disposables.DISPOSED) {
 				s.onError(Operators.onRejectedExecution(ree, r, null, null));
 			}
 		}

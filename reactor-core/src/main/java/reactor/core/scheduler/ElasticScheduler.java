@@ -282,25 +282,20 @@ final class ElasticScheduler implements Scheduler, Supplier<ScheduledExecutorSer
 		@Override
 		public Disposable schedule(Runnable task) {
 			if (shutdown) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 
 			CachedTask ct = new CachedTask(task, this);
 
 			synchronized (this) {
 				if (shutdown) {
-					throw Exceptions.REJECTED_EXECUTION;
+					throw Exceptions.failWithRejected();
 				}
 				tasks.add(ct);
 			}
 
-			Future<?> f;
-			try {
-				f = executor.submit(ct);
-			}
-			catch (RejectedExecutionException ex) {
-				throw Exceptions.REJECTED_EXECUTION;
-			}
+			//RejectedExecutionException are propagated up
+			Future<?> f = executor.submit(ct);
 
 			ct.setFuture(f);
 
@@ -310,14 +305,14 @@ final class ElasticScheduler implements Scheduler, Supplier<ScheduledExecutorSer
 		@Override
 		public Disposable schedule(Runnable task, long delay, TimeUnit unit) {
 			if (shutdown) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 
 			CachedTask ct = new CachedTask(task, this);
 
 			synchronized (this) {
 				if (shutdown) {
-					throw Exceptions.REJECTED_EXECUTION;
+					throw Exceptions.failWithRejected();
 				}
 				tasks.add(ct);
 			}
@@ -333,14 +328,14 @@ final class ElasticScheduler implements Scheduler, Supplier<ScheduledExecutorSer
 		@Override
 		public Disposable schedulePeriodically(Runnable task, long initialDelay, long period, TimeUnit unit) {
 			if (shutdown) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 
 			CachedTask ct = new CachedTask(task, this);
 
 			synchronized (this) {
 				if (shutdown) {
-					throw Exceptions.REJECTED_EXECUTION;
+					throw Exceptions.failWithRejected();
 				}
 				tasks.add(ct);
 			}

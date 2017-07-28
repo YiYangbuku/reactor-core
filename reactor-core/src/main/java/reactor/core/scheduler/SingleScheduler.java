@@ -170,7 +170,7 @@ final class SingleScheduler implements Scheduler, Supplier<ScheduledExecutorServ
 		@Override
 		public Disposable schedule(Runnable task, long delay, TimeUnit unit) {
 			if (shutdown) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 
 			ScheduledRunnable sr = new ScheduledRunnable(task, this);
@@ -201,7 +201,7 @@ final class SingleScheduler implements Scheduler, Supplier<ScheduledExecutorServ
 				long period,
 				TimeUnit unit) {
 			if (shutdown) {
-				throw Exceptions.REJECTED_EXECUTION;
+				throw Exceptions.failWithRejected();
 			}
 
 			ScheduledRunnable sr = new ScheduledRunnable(task, this);

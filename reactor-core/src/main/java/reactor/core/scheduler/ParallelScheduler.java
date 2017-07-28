@@ -194,14 +194,14 @@ final class ParallelScheduler implements Scheduler, Supplier<ScheduledExecutorSe
 	    @Override
         public Disposable schedule(Runnable task) {
             if (shutdown) {
-                throw Exceptions.REJECTED_EXECUTION;
+                throw Exceptions.failWithRejected();
             }
             
             ParallelWorkerTask pw = new ParallelWorkerTask(task, this);
             
             synchronized (this) {
                 if (shutdown) {
-                    throw Exceptions.REJECTED_EXECUTION;
+                    throw Exceptions.failWithRejected();
                 }
                 tasks.add(pw);
             }
@@ -222,14 +222,14 @@ final class ParallelScheduler implements Scheduler, Supplier<ScheduledExecutorSe
         @Override
         public Disposable schedule(Runnable task, long delay, TimeUnit unit) {
             if (shutdown) {
-                throw Exceptions.REJECTED_EXECUTION;
+                throw Exceptions.failWithRejected();
             }
 
             ParallelWorkerTask pw = new ParallelWorkerTask(task, this);
 
             synchronized (this) {
                 if (shutdown) {
-                    throw Exceptions.REJECTED_EXECUTION;
+                    throw Exceptions.failWithRejected();
                 }
                 tasks.add(pw);
             }
@@ -251,14 +251,14 @@ final class ParallelScheduler implements Scheduler, Supplier<ScheduledExecutorSe
         public Disposable schedulePeriodically(Runnable task, long initialDelay,
                 long period, TimeUnit unit) {
             if (shutdown) {
-                throw Exceptions.REJECTED_EXECUTION;
+                throw Exceptions.failWithRejected();
             }
 
             ParallelWorkerTask pw = new ParallelWorkerTask(task, this);
 
             synchronized (this) {
                 if (shutdown) {
-                    throw Exceptions.REJECTED_EXECUTION;
+                    throw Exceptions.failWithRejected();
                 }
                 tasks.add(pw);
             }

@@ -35,7 +35,7 @@ public class ElasticSchedulerTest extends AbstractSchedulerTest {
 
 	@Override
 	protected Scheduler scheduler() {
-		return Schedulers.elastic();
+		return Schedulers.newElastic("ElasticSchedulerTest");
 	}
 
 	@Test(expected = UnsupportedOperationException.class)
@@ -114,7 +114,6 @@ public class ElasticSchedulerTest extends AbstractSchedulerTest {
 			try {
 				StepVerifier.create(Mono
 						.delay(Duration.ofMillis(100), s)
-						.log()
 						.doOnSubscribe(sub -> start.set(System.nanoTime()))
 						.doOnTerminate((v, e) -> end.set(System.nanoTime()))
 				)

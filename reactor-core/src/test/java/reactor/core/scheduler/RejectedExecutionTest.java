@@ -18,26 +18,39 @@ package reactor.core.scheduler;
 
 import java.time.Duration;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestName;
 import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscription;
 import reactor.core.Disposable;
+import reactor.core.Exceptions;
+import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Hooks;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Operators;
 import reactor.core.publisher.ParallelFlux;
+import reactor.core.publisher.SignalType;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.fail;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class RejectedExecutionTest {
+
+	@Rule
+	public TestName testName = new TestName();
 
 	private BoundedScheduler scheduler;
 
@@ -46,6 +59,8 @@ public class RejectedExecutionTest {
 	private ConcurrentLinkedQueue<Object> onNextDropped = new ConcurrentLinkedQueue<>();
 	private ConcurrentLinkedQueue<Throwable> onErrorDropped = new ConcurrentLinkedQueue<>();
 	private ConcurrentLinkedQueue<Throwable> onOperatorError = new ConcurrentLinkedQueue<>();
+	private ConcurrentLinkedQueue<Long> onOperatorErrorData = new ConcurrentLinkedQueue<>();
+	private ConcurrentLinkedQueue<Throwable> onSchedulerHandleError = new ConcurrentLinkedQueue<>();
 
 	@Before
 	public void setUp() {
@@ -54,10 +69,14 @@ public class RejectedExecutionTest {
 		Hooks.onErrorDropped(e -> onErrorDropped.add(e));
 		Hooks.onOperatorError((e, o) -> {
 			onOperatorError.add(e);
-			if (o != null)
-				onNextDropped.add(o);
+			if (o instanceof Long)
+				onOperatorErrorData.add((Long) o);
+			else if (o != null) {
+				System.out.println(o);
+			}
 			return e;
 		});
+		Schedulers.onHandleError((thread, t) -> onSchedulerHandleError.add(t));
 	}
 
 	@After
@@ -66,11 +85,14 @@ public class RejectedExecutionTest {
 		Hooks.resetOnNextDropped();
 		Hooks.resetOnErrorDropped();
 		Hooks.resetOnOperatorError();
+		Schedulers.resetOnHandleError();
 		onNexts.clear();
 		onErrors.clear();
 		onNextDropped.clear();
 		onErrorDropped.clear();
 		onOperatorError.clear();
+		onOperatorErrorData.clear();
+		onSchedulerHandleError.clear();
 	}
 
 	/**
@@ -98,9 +120,11 @@ public class RejectedExecutionTest {
 	@Test
 	public void publishOn() throws Exception {
 		Flux<Long> flux = Flux.interval(Duration.ofMillis(2)).take(255)
-				.publishOn(scheduler)
-				.doOnNext(i -> onNext(i))
-				.doOnError(e -> onError(e));
+		                      .publishOn(scheduler)
+		                      .doOnNext(i -> onNext(i))
+		                      .doOnError(e -> onError(e));
+
+		//FIXME test with publishOn + filter
 
 		verifyRejectedExecutionConsistency(flux, 5);
 	}
@@ -147,6 +171,7 @@ public class RejectedExecutionTest {
 								.doOnError(e -> onError(e)));
 
 		verifyRejectedExecutionConsistency(flux, 5);
+		//FIXME this actually isn't very relevant, the publishOn is transformed to a subscribeOn when fused with just
 	}
 
 	/**
@@ -204,19 +229,55 @@ public class RejectedExecutionTest {
 	 */
 	@Test
 	public void subscribeOn() throws Exception {
-		scheduler.tasksRemaining.set(0);
+		//FIXME test with just, empty, callable, interval
+		scheduler.tasksRemaining.set(2); //1 subscribe, 1 request
 		Flux<Long> flux = Flux.interval(Duration.ofMillis(2)).take(255)
-				.doOnNext(i -> onNexts.add(i))
-				.doOnError(e -> onErrors.add(e))
-				.doOnSubscribe(s -> System.out.println("onSubscribe on thread " + Thread.currentThread().getName()))
 				.doOnRequest(n -> System.out.println("onRequest on thread " + Thread.currentThread().getName() + " " + n))
+				.doOnSubscribe(s -> System.out.println("onSubscribe on thread " + Thread.currentThread().getName()))
+				.doOnNext(value -> System.out.println("onNext(" + value + ") on thread " + Thread.currentThread().getName()))
 				.subscribeOn(scheduler);
 
-		assertThatExceptionOfType(RejectedExecutionException.class)
-				.isThrownBy(flux::blockLast)
-				.withCause(new RejectedExecutionException("BoundedWorker schedule: no more tasks"))
-				.withMessage("Scheduler unavailable")
-				.withStackTraceContaining("Suppressed:");
+		CountDownLatch latch = new CountDownLatch(1);
+		flux.subscribe(new BaseSubscriber<Long>() {
+			@Override
+			protected void hookOnSubscribe(Subscription subscription) {
+				request(1);
+			}
+
+			@Override
+			protected void hookOnNext(Long value) {
+				onNexts.add(value);
+				request(1);
+			}
+
+			@Override
+			protected void hookOnError(Throwable throwable) {
+				onErrors.add(throwable);
+			}
+
+			@Override
+			protected void hookFinally(SignalType type) {
+				latch.countDown();
+			}
+		});
+
+		latch.await(500, TimeUnit.MILLISECONDS);
+
+		assertThat(onNexts).hasSize(1);
+		assertThat(onErrors).hasSize(1);
+		assertThat(onNextDropped).isEmpty();
+		assertThat(onErrorDropped).isEmpty();
+		assertThat(onSchedulerHandleError).isEmpty();
+		assertThat(onOperatorError)
+				.hasSize(1)
+				.last().isInstanceOf(RejectedExecutionException.class);
+		assertThat(onOperatorErrorData)
+				.allMatch(l -> l >= 1,
+						"Data dropped from onOperatorError should always be >= 1");
+
+		if (!onOperatorErrorData.isEmpty()) {
+			System.out.println(testName.getMethodName() + " legitimately has data dropped from onOperatorError: " + onOperatorErrorData);
+		}
 	}
 
 	/**
@@ -246,34 +307,46 @@ public class RejectedExecutionTest {
 	public void flatMapSubscribeOn() throws Exception {
 		Flux<Long> flux = Flux.interval(Duration.ofMillis(2)).take(255)
 				.flatMap(j -> Mono.just(j)
-								.doOnNext(i -> onNexts.add(i))
-								.doOnError(e -> onErrors.add(e))
-								.subscribeOn(scheduler));
+				                  .subscribeOn(scheduler)
+				                  .doOnNext(i -> onNexts.add(i))
+				                  .doOnError(e -> onErrors.add(e)));
 
 		verifyRejectedExecutionConsistency(flux, 5);
 	}
 
 
-	private void verifyRejectedExecutionConsistency(Publisher<Long> flux, int maxTasks) {
-
+	private void verifyRejectedExecutionConsistency(Publisher<Long> flux, int elementCount) {
+		scheduler.tasksRemaining.set(elementCount + 1);
 		StepVerifier verifier = StepVerifier.create(flux, 0)
 					.expectSubscription()
-					.then(() -> scheduler.tasksRemaining.set(maxTasks))
+					.thenRequest(elementCount)
+					.expectNext(0L) //0..elementCount-1
+					.expectNextCount(elementCount - 2)
+					.expectNext(elementCount - 1L)
 					.thenRequest(255)
-					.expectNextCount(255)
-					.expectComplete(); // FIXME: Should this be RejectedExecutionException error?
+					.thenConsumeWhile(l -> true)
+					.expectError(RejectedExecutionException.class);
 
-		try {
-			verifier.verify(Duration.ofSeconds(5));
-		} catch (Throwable t) {
-			// FIXME: At the moment, the tests time out: no onNext or onError generated
-			t.printStackTrace();
-			assertTrue("Unexpected exception: " + t, t.getMessage().contains("VerifySubscriber timed out"));
+		verifier.verify(Duration.ofSeconds(5));
+
+		assertThat(onNexts.size())
+				.isGreaterThanOrEqualTo(elementCount)
+				.isLessThan(255);
+		assertThat(onErrors).hasSize(1);
+		assertThat(onNextDropped).isEmpty();
+		assertThat(onErrorDropped).isEmpty();
+		assertThat(onSchedulerHandleError).isEmpty();
+		assertThat(onOperatorError)
+				.hasSize(1)
+				.last().isInstanceOf(RejectedExecutionException.class);
+		assertThat(onOperatorErrorData)
+				.allMatch(l -> l >= elementCount,
+						"Data dropped from onOperatorError should always be >= elementCount");
+
+		if (!onOperatorErrorData.isEmpty()) {
+			System.out.println(testName.getMethodName() + " legitimately has data dropped from onOperatorError: " + onOperatorErrorData);
 		}
-		assertThat(onNexts.size()).isLessThan(255);
-		assertThat(onErrors).isEmpty(); // FIXME: RejectedExecutionException
-		assertThat(onNextDropped).isEmpty(); // FIXME: onNext dropped silently
-		assertThat(onErrorDropped).isEmpty(); // FIXME: onError not generated
+
 	}
 
 	private void onNext(long i) {
@@ -285,7 +358,7 @@ public class RejectedExecutionTest {
 	private void onError(Throwable t) {
 		String thread = Thread.currentThread().getName();
 		//FIXME evaluate if and when it is legit to be on different thread
-		assertTrue("onError on the wrong thread " + thread, thread.contains("bounded"));
+		assertFalse("onError on the wrong thread " + thread, thread.contains("bounded"));
 		onErrors.add(t);
 	}
 
@@ -320,6 +393,9 @@ public class RejectedExecutionTest {
 
 		@Override
 		public Disposable schedulePeriodically(Runnable task, long initialDelay, long period, TimeUnit unit) {
+			if (tasksRemaining.decrementAndGet() < 0) {
+				throw new RejectedExecutionException("BoundedScheduler schedule periodically: no more tasks");
+			}
 			return actual.schedulePeriodically(task, initialDelay, period, unit);
 		}
 

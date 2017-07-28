@@ -63,7 +63,7 @@ final class ImmediateScheduler implements Scheduler {
         @Override
         public Disposable schedule(Runnable task) {
             if (shutdown) {
-                throw Exceptions.REJECTED_EXECUTION;
+                throw Exceptions.failWithRejected();
             }
             task.run();
             return EMPTY;
