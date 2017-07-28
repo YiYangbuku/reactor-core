@@ -20,6 +20,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 import reactor.core.Disposable;
+import reactor.core.disposable.CompositeDisposable;
 
 import static reactor.core.scheduler.ExecutorServiceScheduler.CANCELLED;
 import static reactor.core.scheduler.ExecutorServiceScheduler.FINISHED;
@@ -35,8 +36,8 @@ import static reactor.core.scheduler.ExecutorServiceScheduler.FINISHED;
  */
 final class ScheduledRunnable implements Runnable, Disposable {
 
-	private static final DisposableContainer<ScheduledRunnable> DISPOSED_PARENT = new EmptyDisposableContainer<>();
-	private static final DisposableContainer<ScheduledRunnable> DONE_PARENT = new EmptyDisposableContainer<>();
+	private static final CompositeDisposable<ScheduledRunnable> DISPOSED_PARENT = new EmptyDisposableContainer<>();
+	private static final CompositeDisposable<ScheduledRunnable> DONE_PARENT     = new EmptyDisposableContainer<>();
 
 	final Runnable task;
 
@@ -44,11 +45,11 @@ final class ScheduledRunnable implements Runnable, Disposable {
 	static final AtomicReferenceFieldUpdater<ScheduledRunnable, Future> FUTURE =
 			AtomicReferenceFieldUpdater.newUpdater(ScheduledRunnable.class, Future.class, "future");
 
-	volatile DisposableContainer<ScheduledRunnable> parent;
-	static final AtomicReferenceFieldUpdater<ScheduledRunnable, DisposableContainer> PARENT =
-			AtomicReferenceFieldUpdater.newUpdater(ScheduledRunnable.class, DisposableContainer.class, "parent");
+	volatile CompositeDisposable<ScheduledRunnable> parent;
+	static final AtomicReferenceFieldUpdater<ScheduledRunnable, CompositeDisposable> PARENT =
+			AtomicReferenceFieldUpdater.newUpdater(ScheduledRunnable.class, CompositeDisposable.class, "parent");
 
-	ScheduledRunnable(Runnable task, DisposableContainer<ScheduledRunnable> parent) {
+	ScheduledRunnable(Runnable task, CompositeDisposable<ScheduledRunnable> parent) {
 		this.task = task;
 		PARENT.lazySet(this, parent);
 	}
@@ -64,7 +65,7 @@ final class ScheduledRunnable implements Runnable, Disposable {
 			}
 		}
 		finally {
-			DisposableContainer<ScheduledRunnable> o = parent;
+			CompositeDisposable<ScheduledRunnable> o = parent;
 			if (o != DISPOSED_PARENT && o != null && PARENT.compareAndSet(this, o, DONE_PARENT)) {
 				o.delete(this);
 			}
@@ -117,7 +118,7 @@ final class ScheduledRunnable implements Runnable, Disposable {
 		}
 
 		for (;;) {
-			DisposableContainer<ScheduledRunnable> o = parent;
+			CompositeDisposable<ScheduledRunnable> o = parent;
 			if (o == DONE_PARENT || o == DISPOSED_PARENT || o == null) {
 				return;
 			}

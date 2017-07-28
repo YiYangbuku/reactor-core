@@ -24,6 +24,7 @@ import reactor.core.CoreSubscriber;
 import reactor.core.Exceptions;
 import reactor.core.Fuseable;
 import reactor.core.Scannable;
+import reactor.core.disposable.Disposables;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 

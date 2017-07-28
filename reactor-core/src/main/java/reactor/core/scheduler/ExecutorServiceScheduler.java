@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 import reactor.core.Disposable;
+import reactor.core.disposable.CompositeDisposable;
 import reactor.util.concurrent.OpenHashSet;
 
 /**
@@ -139,7 +140,7 @@ final class ExecutorServiceScheduler implements Scheduler {
 		}
 	}
 
-	static final class ExecutorServiceWorker implements Worker, DisposableContainer<ExecutorServiceSchedulerRunnable> {
+	static final class ExecutorServiceWorker implements Worker, CompositeDisposable<ExecutorServiceSchedulerRunnable> {
 
 		final ExecutorService executor;
 		final boolean         interruptOnCancel;
@@ -244,6 +245,27 @@ final class ExecutorServiceScheduler implements Scheduler {
 				}
 			}
 			return false;
+		}
+
+		@Override
+		public void clear() {
+			if (!terminated) {
+				OpenHashSet<ExecutorServiceSchedulerRunnable> coll;
+				synchronized (this) {
+					if (terminated) {
+						return;
+					}
+					coll = tasks;
+					tasks = new OpenHashSet<>();
+				}
+
+				coll.clear(Disposable::dispose);
+			}
+		}
+
+		@Override
+		public int size() {
+			return tasks.size();
 		}
 
 		@Override

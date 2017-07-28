@@ -14,44 +14,40 @@
  * limitations under the License.
  */
 
-package reactor.core;
+package reactor.core.disposable;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
+import reactor.core.Disposable;
+import reactor.core.Exceptions;
 import reactor.util.concurrent.OpenHashSet;
 
 /**
- * A container of {@link Disposable} that is itself {@link Disposable}. Atomically
- * add and remove disposable, and dispose them all in one go by either using {@link #clear()}
- * (allowing further reuse of the container) or {@link #dispose()} (disallowing further
- * reuse of the container).
- * <p>
- * Two removal operations are offered: {@link #delete(Disposable)} will NOT call
- * {@link Disposable#dispose()} on the element removed from the container, while
- * {@link #remove(Disposable)} will.
+ * A {@link CompositeDisposable} that allows to atomically add, remove and mass dispose.
  *
  * @author Simon Baslé
  * @author David Karnok
  */
-public class CompositeDisposable implements Disposable {
+final class AtomicCompositeDisposable implements CompositeDisposable<Disposable> {
 
 	OpenHashSet<Disposable> disposables;
 	volatile boolean disposed;
 
 	/**
-	 * Creates an empty {@link CompositeDisposable}.
+	 * Creates an empty {@link AtomicCompositeDisposable}.
 	 */
-	public CompositeDisposable() {
+	public AtomicCompositeDisposable() {
 	}
 
 	/**
-	 * Creates a {@link CompositeDisposable} with the given array of initial elements.
+	 * Creates a {@link AtomicCompositeDisposable} with the given array of initial elements.
 	 * @param disposables the array of {@link Disposable} to start with
 	 */
-	public CompositeDisposable(Disposable... disposables) {
+	public AtomicCompositeDisposable(Disposable... disposables) {
 		Objects.requireNonNull(disposables, "disposables is null");
 		this.disposables = new OpenHashSet<>(disposables.length + 1, 0.75f);
 		for (Disposable d : disposables) {
@@ -61,11 +57,11 @@ public class CompositeDisposable implements Disposable {
 	}
 
 	/**
-	 * Creates a {@link CompositeDisposable} with the given {@link Iterable} sequence of
+	 * Creates a {@link AtomicCompositeDisposable} with the given {@link Iterable} sequence of
 	 * initial elements.
 	 * @param disposables the Iterable sequence of {@link Disposable} to start with
 	 */
-	public CompositeDisposable(Iterable<? extends Disposable> disposables) {
+	public AtomicCompositeDisposable(Iterable<? extends Disposable> disposables) {
 		Objects.requireNonNull(disposables, "disposables is null");
 		this.disposables = new OpenHashSet<>();
 		for (Disposable d : disposables) {
@@ -74,15 +70,6 @@ public class CompositeDisposable implements Disposable {
 		}
 	}
 
-	/**
-	 * Atomically mark the container as {@link #isDisposed() disposed}, clear it and then
-	 * dispose all the previously contained Disposables. From there on the container cannot
-	 * be reused, as {@link #add(Disposable)} and {@link #addAll(Disposable...)} methods
-	 * will immediately return {@literal false}. Use {@link #clear()} instead if you want
-	 * to reuse the container.
-	 *
-	 * @see #clear()
-	 */
 	@Override
 	public void dispose() {
 		if (disposed) {
@@ -101,25 +88,12 @@ public class CompositeDisposable implements Disposable {
 		dispose(set);
 	}
 
-	/**
-	 * Indicates if the container has already been disposed.
-	 * <p>Note that if that is the case, attempts to add new disposable to it via
-	 * {@link #add(Disposable)} and {@link #addAll(Disposable...)} will be rejected.
-	 *
-	 * @return true if the container has been disposed, false otherwise.
-	 */
 	@Override
 	public boolean isDisposed() {
 		return disposed;
 	}
 
-	/**
-	 * Add a {@link Disposable} to this container, if it is not {@link #isDisposed() disposed}.
-	 * Otherwise d is disposed immediately.
-	 *
-	 * @param d the {@link Disposable} to add.
-	 * @return true if the disposable could be added, false otherwise.
-	 */
+	@Override
 	public boolean add(Disposable d) {
 		Objects.requireNonNull(d, "d is null");
 		if (!disposed) {
@@ -139,20 +113,15 @@ public class CompositeDisposable implements Disposable {
 		return false;
 	}
 
-	/**
-	 * Atomically adds the given array of Disposables to the container or disposes them
-	 * all if the container has been disposed.
-	 * @param ds the array of Disposables
-	 * @return true if the operation was successful, false if the container has been disposed
-	 */
-	public boolean addAll(Disposable... ds) {
+	@Override
+	public boolean addAll(Collection<Disposable> ds) {
 		Objects.requireNonNull(ds, "ds is null");
 		if (!disposed) {
 			synchronized (this) {
 				if (!disposed) {
 					OpenHashSet<Disposable> set = disposables;
 					if (set == null) {
-						set = new OpenHashSet<>(ds.length + 1, 0.75f);
+						set = new OpenHashSet<>(ds.size() + 1, 0.75f);
 						disposables = set;
 					}
 					for (Disposable d : ds) {
@@ -169,13 +138,7 @@ public class CompositeDisposable implements Disposable {
 		return false;
 	}
 
-	/**
-	 * Delete the {@link Disposable} from this container, without disposing it.
-	 *
-	 * @param d the {@link Disposable} to delete.
-	 * @return true if the disposable was successfully deleted, false otherwise.
-	 * @see #remove(Disposable)
-	 */
+	@Override
 	public boolean delete(Disposable d) {
 		Objects.requireNonNull(d, "Disposable item is null");
 		if (disposed) {
@@ -194,26 +157,7 @@ public class CompositeDisposable implements Disposable {
 		return true;
 	}
 
-	/**
-	 * Remove the {@link Disposable} from this container, that is delete it from the
-	 * container and dispose it via {@link Disposable#dispose() dispose()} once deleted.
-	 *
-	 * @param d the {@link Disposable} to remove and dispose.
-	 * @return true if the disposable was successfully removed and disposed, false otherwise.
-	 * @see #delete(Disposable)
-	 */
-	public boolean remove(Disposable d) {
-		if (delete(d)) {
-			d.dispose();
-			return true;
-		}
-		return false;
-	}
-
-	/**
-	 * Atomically clears the container, then disposes all the previously contained Disposables.
-	 * Unlike with {@link #dispose()}, the container can still be used after that.
-	 */
+	@Override
 	public void clear() {
 		if (disposed) {
 			return;
@@ -231,10 +175,7 @@ public class CompositeDisposable implements Disposable {
 		dispose(set);
 	}
 
-	/**
-	 * Returns the number of currently held Disposables.
-	 * @return the number of currently held Disposables
-	 */
+	@Override
 	public int size() {
 		if (disposed) {
 			return 0;

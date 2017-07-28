@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *       http://www.apache.org/licenses/LICENSE-2.0
+ *        http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
-package reactor.core.publisher;
+package reactor.core.disposable;
 
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 import org.junit.Test;
 import reactor.core.Disposable;
-import reactor.core.publisher.Disposables;
 import reactor.core.publisher.Hooks;
+import reactor.core.publisher.Operators;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.RaceTestUtils;
 
@@ -77,7 +78,7 @@ public class DisposablesTest {
 		Hooks.onErrorDropped(e -> assertThat(e).isInstanceOf(NullPointerException.class)
 		                                       .hasMessage("next is null"));
 		try {
-			assertThat(Disposables.validate(null, null)).isFalse();
+			assertThat(Disposables.validate(null, null, Operators::onErrorDropped)).isFalse();
 		} finally {
 			Hooks.resetOnErrorDropped();
 		}
@@ -170,5 +171,37 @@ public class DisposablesTest {
 		assertThat(Disposables.trySet(DISPOSABLE_UPDATER, r, d3)).isFalse();
 
 		assertThat(d3.isDisposed()).isTrue();
+	}
+
+	@Test
+	public void sequentialEmpty() {
+		assertThat(Disposables.sequentialDisposable().get()).isNull();
+	}
+
+	@Test
+	public void compositeEmpty() {
+		CompositeDisposable<Disposable> cd = Disposables.compositeDisposable();
+		assertThat(cd.size()).isZero();
+		assertThat(cd.isDisposed()).isFalse();
+	}
+
+	@Test
+	public void compositeFromArray() {
+		Disposable d1 = new FakeDisposable();
+		Disposable d2 = new FakeDisposable();
+
+		CompositeDisposable<Disposable> cd = Disposables.compositeDisposable(d1, d2);
+		assertThat(cd.size()).isEqualTo(2);
+		assertThat(cd.isDisposed()).isFalse();
+	}
+
+	@Test
+	public void compositeFromCollection() {
+		Disposable d1 = new FakeDisposable();
+		Disposable d2 = new FakeDisposable();
+
+		CompositeDisposable<Disposable> cd = Disposables.compositeDisposable(Arrays.asList(d1, d2));
+		assertThat(cd.size()).isEqualTo(2);
+		assertThat(cd.isDisposed()).isFalse();
 	}
 }

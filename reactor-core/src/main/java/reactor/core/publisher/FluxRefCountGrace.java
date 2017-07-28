@@ -28,6 +28,8 @@ import reactor.core.CoreSubscriber;
 import reactor.core.Disposable;
 import reactor.core.Fuseable;
 import reactor.core.Scannable;
+import reactor.core.disposable.Disposables;
+import reactor.core.disposable.SequentialDisposable;
 import reactor.core.scheduler.Scheduler;
 
 /**
@@ -101,7 +103,7 @@ final class FluxRefCountGrace<T> extends Flux<T> implements Scannable, Fuseable 
 	}
 
 	void cancel(RefConnection rc) {
-		Disposables.SequentialDisposable sd;
+		SequentialDisposable sd;
 		synchronized (this) {
 			if (rc.terminated) {
 				return;
@@ -115,7 +117,7 @@ final class FluxRefCountGrace<T> extends Flux<T> implements Scannable, Fuseable 
 				timeout(rc);
 				return;
 			}
-			sd = new Disposables.SequentialDisposable();
+			sd = Disposables.sequentialDisposable();
 			rc.timer = sd;
 		}
 
